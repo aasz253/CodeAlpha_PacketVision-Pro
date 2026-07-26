@@ -25,7 +25,7 @@ A cybersecurity desktop application built with Python for live network packet ca
 
 ## About
 
-PacketVision Pro is a network security tool developed as part of the CodeAlpha Cyber Security Internship program. It captures live network traffic using Scapy, decodes multiple protocol layers, detects suspicious activity, and presents everything in a clean Tkinter-based dashboard inspired by Wireshark.
+PacketVision Pro is a network security tool developed by **Sifuna Codex** as part of the CodeAlpha Cyber Security Internship program. It captures live network traffic using Scapy, decodes multiple protocol layers, detects suspicious activity, and presents everything in a clean Tkinter-based dashboard inspired by Wireshark.
 
 The tool is aimed at security analysts and network administrators who need a quick, scriptable packet analyzer with built-in threat detection capabilities.
 
@@ -510,4 +510,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ---
 
-*Developed as part of the CodeAlpha Cyber Security Internship Program*
+*Developed by **Sifuna Codex** as part of the CodeAlpha Cyber Security Internship Program*
