@@ -52,6 +52,7 @@ from core.capture import PacketCaptureEngine, CaptureStats, LiveCaptureManager
 from core.protocols import ProtocolParser, MACVendorLookup, WELL_KNOWN_PORTS, DNS_TYPES
 from core.detection import ThreatDetector, ThresholdConfig, ThreatAlert, Severity
 from core.export import PacketExporter, PCAPWriter
+from core.report import generate_report
 from gui.styles import DarkTheme, LightTheme, ProtocolColors
 
 logger = logging.getLogger(__name__)
@@ -121,6 +122,8 @@ class PacketVisionApp:
         self._inc_src_ip_counts = defaultdict(int)
         self._inc_dst_ip_counts = defaultdict(int)
         self._inc_conv_counts = defaultdict(lambda: {'count': 0, 'bytes': 0})
+        self._capture_start_time = None
+        self._alert_history = []
         
         # Initialize components
         self._init_database()
@@ -819,6 +822,7 @@ class PacketVisionApp:
         
         self.capturing = True
         self.paused = False
+        self._capture_start_time = time.time()
         
         self.start_btn.configure(state='disabled')
         self.stop_btn.configure(state='normal')
@@ -1501,6 +1505,15 @@ class PacketVisionApp:
         self.alert_count += 1
         ts = datetime.fromtimestamp(alert.timestamp).strftime('%H:%M:%S')
         
+        self._alert_history.append({
+            'timestamp_str': ts,
+            'alert_type': alert.threat_type.value,
+            'severity': alert.severity.value,
+            'src_ip': alert.source_ip,
+            'dst_ip': alert.target_ip,
+            'description': alert.description,
+        })
+        
         sev = alert.severity.value
         self.alert_tree.insert('', 0,
                              values=(ts, alert.threat_type.value.upper(), sev.upper(),
@@ -2165,6 +2178,23 @@ class PacketVisionApp:
                 self._stop_capture()
             else:
                 return
+        
+        # Auto-generate PDF capture report
+        if self.packets:
+            try:
+                self._set_status("Generating PDF report...")
+                self.root.update()
+                report_path = generate_report(
+                    packets=self.packets,
+                    alerts=self._alert_history,
+                    interface=self.interface or "unknown",
+                    start_time=self._capture_start_time,
+                    end_time=time.time(),
+                )
+                if report_path:
+                    logger.info(f"PDF report saved: {report_path}")
+            except Exception as e:
+                logger.error(f"Failed to generate PDF report: {e}")
         
         # Save DB info
         try:

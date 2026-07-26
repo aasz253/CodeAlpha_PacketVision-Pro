@@ -63,6 +63,7 @@ The tool is aimed at security analysts and network administrators who need a qui
 - **PCAP Export** - Standard format compatible with Wireshark, tshark, and other tools
 - **JSON Export** - Structured data format for programmatic access
 - **Summary Report** - Human-readable text report with protocol breakdown and top talkers
+- **Auto PDF Report** - Automatically generates a professional PDF capture report on application close, saved to `~/Documents/PacketVision_Reports/`
 
 ### User Interface
 - **Dark Mode Dashboard** - Professional Wireshark-inspired color scheme
