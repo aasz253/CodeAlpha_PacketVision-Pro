@@ -60,7 +60,7 @@ def setup_logging(level=logging.INFO, log_file=None):
 def check_dependencies():
     """Check for required and optional dependencies."""
     required = ['scapy']
-    optional = ['customtkinter', 'matplotlib', 'numpy', 'pandas']
+    optional = ['matplotlib', 'numpy']
     
     missing_required = []
     missing_optional = []
