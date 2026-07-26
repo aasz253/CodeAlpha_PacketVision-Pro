@@ -119,24 +119,39 @@ The application follows a modular architecture where each core component is resp
 
 PacketVision Pro runs on **Windows**, **Linux** (Ubuntu, Kali, Fedora, etc.), and **macOS**. The only requirement is Python 3.8+ and administrator/root privileges for live packet capture.
 
-### Quick Install (All Platforms)
+### Easiest Install (One Command)
+
+**Linux / macOS:**
+```bash
+git clone https://github.com/aasz253/CodeAlpha_PacketVision-Pro.git && cd CodeAlpha_PacketVision-Pro && chmod +x install.sh && ./install.sh
+```
+
+**Windows (Run as Administrator):**
+```cmd
+git clone https://github.com/aasz253/CodeAlpha_PacketVision-Pro.git && cd CodeAlpha_PacketVision-Pro && install.bat
+```
+
+### After Install — Run the App
 
 ```bash
-# 1. Clone or download the project
-git clone https://github.com/yourusername/packetvision-pro.git
-cd packetvision-pro
+# Linux / macOS
+./run.sh
 
-# 2. (Recommended) Create a virtual environment
+# Windows (Run as Administrator)
+run.bat
+```
+
+### Manual Install (if scripts don't work)
+
+```bash
+git clone https://github.com/aasz253/CodeAlpha_PacketVision-Pro.git
+cd CodeAlpha_PacketVision-Pro
 python3 -m venv venv
 source venv/bin/activate        # Linux / macOS
 venv\Scripts\activate           # Windows
-
-# 3. Install dependencies
 pip install -r requirements.txt
-
-# 4. Run (see platform-specific notes below)
 sudo python3 main.py            # Linux / macOS
-python main.py                  # Windows (run terminal as Administrator)
+python main.py                  # Windows (run as Administrator)
 ```
 
 ---
