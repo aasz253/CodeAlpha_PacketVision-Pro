@@ -53,6 +53,7 @@ from core.protocols import ProtocolParser, MACVendorLookup, WELL_KNOWN_PORTS, DN
 from core.detection import ThreatDetector, ThresholdConfig, ThreatAlert, Severity
 from core.export import PacketExporter, PCAPWriter
 from core.report import generate_report
+from core.geoip import GeoIPLookup
 from gui.styles import DarkTheme, LightTheme, ProtocolColors
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,12 @@ class PacketVisionApp:
         self._inc_conv_counts = defaultdict(lambda: {'count': 0, 'bytes': 0})
         self._capture_start_time = None
         self._alert_history = []
+        self.geoip = GeoIPLookup()
+        
+        # Bandwidth per host tracking
+        self._bw_host_bytes = defaultdict(int)
+        self._bw_history = defaultdict(lambda: {'times': [], 'bytes': []})
+        self._bw_last_update = time.time()
         
         # Initialize components
         self._init_database()
@@ -406,6 +413,14 @@ class PacketVisionApp:
         search_btn = ttk.Button(right_frame, text="Search", style='Dark.TButton',
                                command=self._apply_search)
         search_btn.pack(side=tk.LEFT, padx=3)
+        
+        # Theme toggle button
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.RIGHT, fill=tk.Y, padx=8, pady=6)
+        self.theme_btn = tk.Button(right_frame, text="☀ Light", font=(self.theme.FONT_FAMILY_UI, 9),
+                                   bg=self.theme.BG_INPUT, fg=self.theme.FG_PRIMARY,
+                                   activebackground=self.theme.BG_HOVER, activeforeground=self.theme.FG_BRIGHT,
+                                   relief=tk.FLAT, cursor="hand2", command=self._toggle_theme)
+        self.theme_btn.pack(side=tk.RIGHT, padx=4)
 
     def _build_main_layout(self):
         main_frame = tk.Frame(self.root, bg=self.theme.BG_PRIMARY)
@@ -591,6 +606,11 @@ class PacketVisionApp:
             graph_frame = tk.Frame(self.tab_notebook, bg=self.theme.BG_PRIMARY)
             self._build_graph_tab(graph_frame)
             self.tab_notebook.add(graph_frame, text="  Traffic  ")
+            
+            # Bandwidth per Host tab
+            bw_frame = tk.Frame(self.tab_notebook, bg=self.theme.BG_PRIMARY)
+            self._build_bandwidth_tab(bw_frame)
+            self.tab_notebook.add(bw_frame, text="  Bandwidth  ")
 
     def _build_statistics_tab(self, parent):
         """Build statistics display."""
@@ -785,6 +805,16 @@ class PacketVisionApp:
         
         self.graph_data = {'times': [], 'counts': [], 'bytes': []}
 
+    def _build_bandwidth_tab(self, parent):
+        """Build bandwidth per host chart."""
+        self.bw_figure = Figure(figsize=(4, 3), dpi=100, facecolor=self.theme.BG_PRIMARY)
+        self.bw_ax = self.bw_figure.add_subplot(111)
+        self.bw_ax.set_facecolor(self.theme.BG_SECONDARY)
+        self.bw_figure.tight_layout(pad=2)
+        
+        self.bw_canvas = FigureCanvasTkAgg(self.bw_figure, parent)
+        self.bw_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
     def _build_statusbar(self):
         """Build bottom status bar."""
         statusbar = tk.Frame(self.root, bg=self.theme.BG_HEADER, height=28)
@@ -907,6 +937,12 @@ class PacketVisionApp:
         for pkt in queue:
             self.packets.append(pkt)
             self._update_incremental_counters(pkt)
+            
+            # Track bandwidth per host
+            src = pkt.get('src_ip')
+            if src:
+                self._bw_host_bytes[src] += pkt.get('packet_length', 0)
+            
             packet_id = len(self.packets)
             self._add_packet_to_tree(packet_id, pkt)
             
@@ -930,6 +966,7 @@ class PacketVisionApp:
         if self._stats_update_counter >= 40:
             self._stats_update_counter = 0
             self._update_statistics_tab()
+            self._update_bandwidth_chart()
         
         # Schedule next batch
         if self._processing_queue:
@@ -991,6 +1028,13 @@ class PacketVisionApp:
         
         src = pkt.get('src_ip', pkt.get('src_mac', ''))
         dst = pkt.get('dst_ip', pkt.get('dst_mac', ''))
+        
+        # Add GeoIP flags for IP addresses
+        if src and '.' in src and not src.startswith('00:'):
+            src = self.geoip.format_ip(src)
+        if dst and '.' in dst and not dst.startswith('00:'):
+            dst = self.geoip.format_ip(dst)
+        
         proto = pkt.get('protocol_name', 'Unknown')
         length = pkt.get('packet_length', 0)
         info = self._get_packet_info(pkt)
@@ -1161,8 +1205,32 @@ class PacketVisionApp:
                                              tags=('layer',))
             self.detail_tree.insert(ip_node, tk.END, text=f'Source IP: {src_ip}',
                                    tags=('field',))
+            
+            # GeoIP lookup for source
+            src_geo = self.geoip.lookup(src_ip)
+            if src_geo['country'] != 'Private' and src_geo['country'] != 'Unknown':
+                geo_str = f"{src_geo['flag']} {src_geo['country']}"
+                if src_geo['city']:
+                    geo_str += f", {src_geo['city']}"
+                if src_geo['org']:
+                    geo_str += f" ({src_geo['org']})"
+                self.detail_tree.insert(ip_node, tk.END, text=f'Source GeoIP: {geo_str}',
+                                       tags=('field',))
+            
             self.detail_tree.insert(ip_node, tk.END, text=f'Destination IP: {dst_ip}',
                                    tags=('field',))
+            
+            # GeoIP lookup for destination
+            dst_geo = self.geoip.lookup(dst_ip)
+            if dst_geo['country'] != 'Private' and dst_geo['country'] != 'Unknown':
+                geo_str = f"{dst_geo['flag']} {dst_geo['country']}"
+                if dst_geo['city']:
+                    geo_str += f", {dst_geo['city']}"
+                if dst_geo['org']:
+                    geo_str += f" ({dst_geo['org']})"
+                self.detail_tree.insert(ip_node, tk.END, text=f'Dest GeoIP: {geo_str}',
+                                       tags=('field',))
+            
             self.detail_tree.insert(ip_node, tk.END, text=f'TTL: {ttl}', tags=('field',))
             self.detail_tree.insert(ip_node, tk.END, text=f'Protocol: {proto}',
                                    tags=('field',))
@@ -1475,6 +1543,63 @@ class PacketVisionApp:
         
         self.graph_figure.tight_layout(pad=1.5)
         self.graph_canvas.draw()
+
+    def _update_bandwidth_chart(self):
+        """Update bandwidth per host horizontal bar chart."""
+        if not HAS_MATPLOTLIB or not hasattr(self, 'bw_ax'):
+            return
+        
+        self.bw_ax.clear()
+        self.bw_ax.set_facecolor(self.theme.BG_SECONDARY)
+        
+        # Get top 10 hosts by total bytes
+        top_hosts = sorted(self._bw_host_bytes.items(), key=lambda x: -x[1])[:10]
+        
+        if not top_hosts:
+            self.bw_ax.text(0.5, 0.5, 'No data yet', transform=self.bw_ax.transAxes,
+                           ha='center', va='center', color=self.theme.FG_SECONDARY, fontsize=10)
+            self.bw_ax.set_title('Bandwidth per Host (Total)', color=self.theme.FG_PRIMARY, fontsize=10)
+            self.bw_figure.tight_layout(pad=1.5)
+            self.bw_canvas.draw()
+            return
+        
+        # Format: short IP + flag
+        labels = []
+        values = []
+        colors = []
+        color_palette = [self.theme.ACCENT_BLUE, self.theme.ACCENT_GREEN, self.theme.ACCENT_ORANGE,
+                        self.theme.ACCENT_PURPLE, self.theme.ACCENT_CYAN, self.theme.ACCENT_PINK,
+                        self.theme.ACCENT_RED, self.theme.ACCENT_YELLOW]
+        
+        for i, (host, total_bytes) in enumerate(reversed(top_hosts)):
+            # Truncate long IPs for display
+            geo = self.geoip.lookup(host)
+            label = f"{geo['flag']} {host}" if geo['flag'] else host
+            if len(label) > 20:
+                label = label[:18] + '..'
+            labels.append(label)
+            values.append(total_bytes / 1024)  # KB
+            colors.append(color_palette[i % len(color_palette)])
+        
+        bars = self.bw_ax.barh(range(len(labels)), values, color=colors, height=0.6, alpha=0.85)
+        self.bw_ax.set_yticks(range(len(labels)))
+        self.bw_ax.set_yticklabels(labels, fontsize=7, color=self.theme.FG_SECONDARY)
+        self.bw_ax.set_xlabel('KB', color=self.theme.FG_SECONDARY, fontsize=8)
+        self.bw_ax.set_title('Bandwidth per Host (Total)', color=self.theme.FG_PRIMARY, fontsize=10)
+        self.bw_ax.tick_params(colors=self.theme.FG_SECONDARY, labelsize=7)
+        self.bw_ax.spines['top'].set_visible(False)
+        self.bw_ax.spines['right'].set_visible(False)
+        self.bw_ax.spines['bottom'].set_color(self.theme.BORDER_COLOR)
+        self.bw_ax.spines['left'].set_color(self.theme.BORDER_COLOR)
+        
+        # Add value labels on bars
+        for bar, val in zip(bars, values):
+            if val > 0:
+                self.bw_ax.text(bar.get_width() + max(values) * 0.01, bar.get_y() + bar.get_height()/2,
+                               f'{val:.0f} KB', va='center', fontsize=6, color=self.theme.FG_SECONDARY)
+        
+        self.bw_figure.tight_layout(pad=1.5)
+        self.bw_canvas.draw()
 
     # ═══════════════════════════════════════════════════════════════
     # ALERTS
@@ -2119,6 +2244,49 @@ class PacketVisionApp:
 
     def _toggle_auto_scroll(self):
         self.auto_scroll = self._auto_scroll_var.get()
+
+    def _toggle_theme(self):
+        """Toggle between dark and light themes."""
+        self.dark_mode = not self.dark_mode
+        self.theme = DarkTheme if self.dark_mode else LightTheme
+        
+        # Update theme button text
+        self.theme_btn.config(text="☀ Light" if self.dark_mode else "🌙 Dark",
+                             bg=self.theme.BG_INPUT, fg=self.theme.FG_PRIMARY,
+                             activebackground=self.theme.BG_HOVER, activeforeground=self.theme.FG_BRIGHT)
+        
+        # Update root and main frames
+        self.root.configure(bg=self.theme.BG_PRIMARY)
+        self._apply_theme_recursive(self.root)
+        
+        # Update graph colors if present
+        if HAS_MATPLOTLIB and hasattr(self, 'graph_ax'):
+            self.graph_figure.set_facecolor(self.theme.BG_PRIMARY)
+            self.graph_ax.set_facecolor(self.theme.BG_SECONDARY)
+            self._update_graph()
+        
+        self._set_status(f"Theme: {'Dark' if self.dark_mode else 'Light'}")
+
+    def _apply_theme_recursive(self, widget):
+        """Recursively apply theme colors to widgets."""
+        try:
+            w_class = widget.winfo_class()
+            if w_class in ('Frame', 'Toplevel'):
+                widget.configure(bg=self.theme.BG_PRIMARY)
+            elif w_class == 'Label':
+                bg = str(widget.cget('bg'))
+                if bg not in ('#ff4757', '#00ff88', '#ffa502', '#dc3545', '#28a745', '#fd7e14'):
+                    widget.configure(bg=self.theme.BG_PRIMARY, fg=self.theme.FG_PRIMARY)
+            elif w_class == 'Entry':
+                widget.configure(bg=self.theme.BG_INPUT, fg=self.theme.FG_PRIMARY,
+                               insertbackground=self.theme.FG_PRIMARY)
+            elif w_class == 'Menubutton':
+                widget.configure(bg=self.theme.BG_HEADER, fg=self.theme.FG_PRIMARY)
+        except Exception:
+            pass
+        
+        for child in widget.winfo_children():
+            self._apply_theme_recursive(child)
 
     def _format_bytes(self, size: int) -> str:
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:

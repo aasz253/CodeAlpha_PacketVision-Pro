@@ -38,6 +38,9 @@ The tool is aimed at security analysts and network administrators who need a qui
 - **Protocol Detection** - Automatic decoding of Ethernet, IPv4, IPv6, TCP, UDP, ICMP, ARP, DNS, HTTP, and DHCP protocols
 - **Packet Statistics** - Real-time counters for packets, bytes, rates, and protocol distribution
 - **Traffic Visualization** - Live throughput graphs using Matplotlib (packets/sec and KB/sec)
+- **Bandwidth per Host** - Horizontal bar chart showing total bandwidth usage per source IP
+- **GeoIP Lookup** - Country flags and location info on IPs using ip-api.com (cached, threaded)
+- **Dark/Light Theme Toggle** - Switch between dark and light themes from the toolbar
 
 ### Analysis Tools
 - **Wireshark-Style Display Filters** - Filter by protocol, IP, port, or custom expressions (e.g., `tcp`, `ip.src == 192.168.1.1`, `tcp.port == 443`, `dns.qry.name == example.com`)
@@ -412,7 +415,9 @@ packetvision-pro/
 │   ├── capture.py          # Scapy-based packet capture engine
 │   ├── database.py         # SQLite storage and retrieval
 │   ├── detection.py        # Threat detection engine
-│   └── export.py           # CSV, PCAP, JSON export
+│   ├── export.py           # CSV, PCAP, JSON export
+│   ├── report.py           # Auto PDF capture report generator
+│   └── geoip.py            # IP geolocation lookup (ip-api.com)
 │
 └── gui/                    # User interface
     ├── __init__.py         # Package init
